@@ -76,6 +76,11 @@ fn collect(path: &str) -> Vec<PatentRecord> {
 
 Now we need to turn the data into tokens. We will use the `tokenizers` crate to do this. Before we can tokenize the strings, it is necessary to format them. This usually consists of the phrase and the CPC classification.
 
+Tokenization is a two-step process.
+
+1. First the tokenizer segments the data into small chunks. This is a mix of science and art, as you can split up a sentence a bunch of different ways.
+2. Second is numericalization:. This is the process of encoding the tokens into integers so they can be processed by the neural network.
+
 ```rust
 fn preprocess(rec: &PatentRecord) -> String {
     format!(
@@ -130,3 +135,9 @@ Now that we have those neat functions set up, we can easily split the dataset. W
     let training_set = data::create_dataset("dataset/train.csv");
     let validation_set = data::create_dataset("dataset/validate.csv");
 ```
+
+## Training
+
+The current status quo for Natural Language Processing is to use Transformers. This is a neural network architecture designed to understand the relationship between sequential data points.
+
+Our transformer will come from burn's very own Transformer crate.
