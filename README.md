@@ -34,6 +34,99 @@ Their description is:
 
 This is a **Nominal** dataset.
 
-## Gathering Data
+## Preparing Data
 
-We need to get the data from the csv file and into a format that we can use in Rust. We will use the `csv` crate to do this.
+### Collecting
+
+We need to get the data from the csv file and into a format that we can use in Rust. We will use the `csv` crate to do this, along with the `serde` crate to deserialize the data.
+
+```rust
+// Represents a single row in the csv dataset
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PatentRecord {
+    // Unique patent ID
+    pub id: String,
+
+    // The first phrase of the patent
+    pub anchor: String,
+
+    // The second phrase of the patent
+    pub target: String,
+
+    // CPC classification which indicates the subject within which the similarity is scored
+    pub context: String,
+
+    // The similarity score
+    pub score: f32,
+}
+
+fn collect(path: &str) -> Vec<PatentRecord> {
+    let mut reader = csv::ReaderBuilder::new()
+        .from_path(std::path::Path::new(path))
+        .expect("Path not found");
+
+    reader
+        .deserialize()
+        .map(|item| item.expect("Not a valid record"))
+        .collect()
+}
+```
+
+### Tokenizing
+
+Now we need to turn the data into tokens. We will use the `tokenizers` crate to do this. Before we can tokenize the strings, it is necessary to format them. This usually consists of the phrase and the CPC classification.
+
+```rust
+fn preprocess(rec: &PatentRecord) -> String {
+    format!(
+        "PHR1: {} PHR2: {} CON: {}",
+        rec.anchor, rec.target, rec.context
+    )
+}
+
+fn tokenize(text: String) -> Encoding {
+    let tokenizer = tokenizers::tokenizer::Tokenizer::from_pretrained("bert-base-cased", None)
+        .expect("Tokenizer not initialized");
+
+    tokenizer.encode(text, false).expect("Encoding failed")
+}
+```
+
+### Classifying
+
+We need to classify the data entry now. This is simply combining our encoded text with the classification.
+
+```rust
+fn classify(record: &PatentRecord) -> DataPoint {
+    let text = preprocess(record);
+    let tokenized = tokenize(text);
+    DataPoint {
+        encoded_text: tokenized,
+        classification: record.score.to_string(),
+    }
+}
+```
+
+### Creating Dataset
+
+Now we can bring it all together, and store the DataPoint in an InMemDataset.
+
+```rust
+use burn::data::dataset::InMemDataset;
+
+pub fn create_dataset(path: &str) -> InMemDataset<DataPoint> {
+    let data = collect(path);
+    let set = data.into_iter().map(|rec| classify(&rec)).collect();
+
+    InMemDataset::new(set)
+}
+```
+
+### Split Dataset
+
+Now that we have those neat functions set up, we can easily split the dataset. We need to split it into a training, validation set, and test set. For now we will only worry about the first two.
+
+```rust
+    let training_set = data::create_dataset("dataset/train.csv");
+    let validation_set = data::create_dataset("dataset/validate.csv");
+```
