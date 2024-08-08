@@ -1,6 +1,5 @@
 use burn::data::dataset::InMemDataset;
 use serde::{Deserialize, Serialize};
-use tokenizers::Encoding;
 
 // Represents a single row in the csv dataset
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -23,8 +22,22 @@ pub struct PatentRecord {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DataPoint {
-    pub encoded_text: Encoding,
-    pub classification: String,
+    pub feature: String,
+    pub label: f32,
+}
+
+impl DataPoint {
+    pub fn new(anchor: &str, target: &str, context: &str, score: f32) -> Self {
+        let feature = DataPoint::pre_process(anchor, target, context);
+        Self {
+            feature,
+            label: score,
+        }
+    }
+
+    pub fn pre_process(anchor: &str, target: &str, context: &str) -> String {
+        format!("PHR1: {} PHR2: {} CON: {}", anchor, target, context)
+    }
 }
 
 fn collect(path: &str) -> Vec<PatentRecord> {
@@ -38,38 +51,21 @@ fn collect(path: &str) -> Vec<PatentRecord> {
         .collect()
 }
 
-fn preprocess(rec: &PatentRecord) -> String {
-    format!(
-        "PHR1: {} PHR2: {} CON: {}",
-        rec.anchor, rec.target, rec.context
-    )
-}
-
-fn tokenize(text: String) -> Encoding {
-    let tokenizer = tokenizers::tokenizer::Tokenizer::from_pretrained("bert-base-cased", None)
-        .expect("Tokenizer not initialized");
-
-    tokenizer.encode(text, false).expect("Encoding failed")
-}
-
-fn classify(record: &PatentRecord) -> DataPoint {
-    let text = preprocess(record);
-    let tokenized = tokenize(text);
-    DataPoint {
-        encoded_text: tokenized,
-        classification: record.score.to_string(),
-    }
-}
-
 pub fn create_dataset(path: &str) -> InMemDataset<DataPoint> {
     let data = collect(path);
-    let set = data.into_iter().map(|rec| classify(&rec)).collect();
+
+    let set = data
+        .into_iter()
+        .map(|r| DataPoint::new(&r.anchor, &r.target, &r.context, r.score))
+        .collect();
 
     InMemDataset::new(set)
 }
 
 #[cfg(test)]
 mod tests {
+    use burn::data::dataset::Dataset;
+
     use super::*;
     #[test]
     fn test_collect() {
@@ -79,27 +75,23 @@ mod tests {
     }
 
     #[test]
-    fn test_preprocess() {
+    fn test_pre_process() {
         let data = collect("dataset/train.csv");
-        let processed = preprocess(&data[0]);
+        let PatentRecord {
+            anchor,
+            target,
+            context,
+            ..
+        } = &data[0];
+
+        let processed = DataPoint::pre_process(anchor, target, context);
         dbg!(&processed);
         assert!(processed.contains("PHR1:"));
     }
 
     #[test]
-    fn test_tokenize() {
-        let data = collect("dataset/train.csv");
-        let processed = preprocess(&data[0]);
-        let tokenized = tokenize(processed);
-        dbg!(&tokenized);
-        assert!(tokenized.get_ids().len() > 0);
-    }
-
-    #[test]
-    fn test_classify() {
-        let data = collect("dataset/train.csv");
-        let processed = classify(&data[0]);
-        dbg!(&processed);
-        assert!(processed.encoded_text.get_ids().len() > 0);
+    fn test_create_dataset() {
+        let set = create_dataset("dataset/validate.csv");
+        assert!(!set.is_empty());
     }
 }
