@@ -1,4 +1,3 @@
-use burn::data::dataset::InMemDataset;
 use serde::{Deserialize, Serialize};
 
 // Represents a single row in the csv dataset
@@ -51,20 +50,16 @@ fn collect(path: &str) -> Vec<PatentRecord> {
         .collect()
 }
 
-pub fn create_dataset(path: &str) -> InMemDataset<DataPoint> {
+pub fn create_dataset(path: &str) -> Vec<DataPoint> {
     let data = collect(path);
 
-    let set = data
-        .into_iter()
+    data.into_iter()
         .map(|r| DataPoint::new(&r.anchor, &r.target, &r.context, r.score))
-        .collect();
-
-    InMemDataset::new(set)
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
-    use burn::data::dataset::Dataset;
 
     use super::*;
     #[test]
