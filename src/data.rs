@@ -1,4 +1,6 @@
+use derive_new::new;
 use serde::{Deserialize, Serialize};
+use tokenizers::Tokenizer;
 
 // Represents a single row in the csv dataset
 #[derive(Serialize, Deserialize, Debug)]
@@ -19,52 +21,31 @@ struct PatentRecord {
     pub score: f32,
 }
 
-#[derive(Clone)]
+#[derive(Clone, new)]
 pub struct DataPoint {
     pub feature: Vec<usize>,
     pub label: f32,
     pub seq_len: usize,
 }
 
-impl DataPoint {
-    pub fn new(anchor: &str, target: &str, context: &str, score: f32) -> Self {
-        let context_string = DataPoint::pre_process(anchor, target, context);
-        let feature = DataPoint::tokenize(&context_string);
-        let seq_len = feature.len();
-
-        Self {
-            feature,
-            label: score,
-            seq_len,
-        }
-    }
-
-    fn tokenize(text: &str) -> Vec<usize> {
-        let tokenizer = tokenizers::tokenizer::Tokenizer::from_pretrained("bert-base-cased", None)
-            .expect("Tokenizer not initialized");
-
-        let tokens = tokenizer.encode(text, false).expect("Encoding failed");
-        tokens.get_ids().into_iter().map(|x| *x as usize).collect()
-    }
-
-    fn pre_process(anchor: &str, target: &str, context: &str) -> String {
-        format!("PHR1: {} PHR2: {} CON: {}", anchor, target, context)
-    }
-}
-
 pub struct DataSet {
     pub data_points: Vec<DataPoint>,
+    pub vocab_size: usize,
     pub max_seq_len: usize,
 }
 
 impl DataSet {
-    pub fn new(path: &str) -> Self {
+    pub fn new(path: &str, tokenizer: &Tokenizer) -> Self {
         let records = Self::collect(path);
         let mut max_seq_len = 0;
         let mut data_points = Vec::new();
 
-        for rec in records.iter() {
-            let dp = DataPoint::new(&rec.anchor, &rec.target, &rec.context, rec.score);
+        for r in records.iter() {
+            let feature = Self::tokenize_text(tokenizer, &r.anchor, &r.target, &r.context);
+            let seq_len = feature.len();
+
+            let dp = DataPoint::new(feature, r.score, seq_len);
+
             let sl = dp.seq_len;
             if sl > max_seq_len {
                 max_seq_len = sl;
@@ -73,10 +54,24 @@ impl DataSet {
             data_points.push(dp);
         }
 
+        let vocab_size = tokenizer.get_vocab_size(true);
+
         Self {
             data_points,
             max_seq_len,
+            vocab_size,
         }
+    }
+
+    fn tokenize_text(
+        tokenizer: &Tokenizer,
+        anchor: &str,
+        target: &str,
+        context: &str,
+    ) -> Vec<usize> {
+        let text = format!("PHR1: {} PHR2: {} CON: {}", anchor, target, context);
+        let tokens = tokenizer.encode(text, false).expect("Encoding failed");
+        tokens.get_ids().into_iter().map(|x| *x as usize).collect()
     }
 
     fn collect(path: &str) -> Vec<PatentRecord> {
@@ -103,24 +98,11 @@ mod tests {
     }
 
     #[test]
-    fn test_pre_process() {
-        let data = DataSet::collect("dataset/train.csv");
-        let PatentRecord {
-            anchor,
-            target,
-            context,
-            ..
-        } = &data[0];
-
-        let processed = DataPoint::pre_process(anchor, target, context);
-        dbg!(&processed);
-        assert!(processed.contains("PHR1:"));
-    }
-
-    #[test]
     fn test_tokenize() {
-        let processed = DataPoint::pre_process("telephone", "communications", "DO3");
-        let encoded_text = DataPoint::tokenize(&processed);
+        let tokenizer = tokenizers::tokenizer::Tokenizer::from_pretrained("bert-base-cased", None)
+            .expect("Tokenizer not initialized");
+
+        let encoded_text = DataSet::tokenize_text(&tokenizer, "telephone", "communications", "DO3");
 
         dbg!(&encoded_text);
         assert!(encoded_text.len() == 18);

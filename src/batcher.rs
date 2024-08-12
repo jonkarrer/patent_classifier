@@ -3,16 +3,18 @@ use crate::{
     data::{DataPoint, DataSet},
 };
 use burn::{
-    nn::attention::{generate_padding_mask, GeneratePaddingMask},
-    tensor::{Bool, Device, Float, Int, Tensor},
+    nn::{
+        attention::{generate_padding_mask, GeneratePaddingMask},
+        EmbeddingConfig,
+    },
+    tensor::{Bool, Device, Float, Tensor},
 };
 
 #[derive(Debug)]
 pub struct Batch {
-    pub max_seq_len: usize,
-    pub features: Tensor<MyBackend, 2, Int>,
+    pub embeddings: Tensor<MyBackend, 3, Float>,
     pub labels: Tensor<MyBackend, 1, Float>,
-    pub padding_masks: Tensor<MyBackend, 2, Bool>,
+    pub mask: Tensor<MyBackend, 2, Bool>,
 }
 
 pub struct Batcher {
@@ -22,14 +24,20 @@ pub struct Batcher {
 
 impl Batcher {
     pub fn new(
-        data_points: Vec<DataPoint>,
-        max_seq_len: usize,
+        data_set: DataSet,
         batch_size: usize,
+        model_size: usize,
         device: &Device<MyBackend>,
     ) -> Self {
         let mut batches = Vec::new();
-        for chk in data_points.chunks(batch_size) {
-            batches.push(Batcher::create_batch(chk, max_seq_len, device));
+        for chk in data_set.data_points.chunks(batch_size) {
+            batches.push(Batcher::create_batch(
+                chk,
+                data_set.max_seq_len,
+                data_set.vocab_size,
+                model_size,
+                device,
+            ));
         }
 
         Self {
@@ -41,6 +49,8 @@ impl Batcher {
     fn create_batch(
         data_points: &[DataPoint],
         max_seq_len: usize,
+        vocab_size: usize,
+        model_size: usize,
         device: &Device<MyBackend>,
     ) -> Batch {
         let mut features = Vec::new();
@@ -59,11 +69,26 @@ impl Batcher {
         let mask: GeneratePaddingMask<MyBackend> =
             generate_padding_mask(0, features, Some(max_seq_len), device);
 
+        let features = mask.tensor.to_device(device);
+        let labels = Tensor::from_floats(labels.as_slice(), device).to_device(device);
+        let mask = mask.mask.to_device(device);
+
+        let index_positions = Tensor::arange(0..max_seq_len as i64, device)
+            .reshape([1, max_seq_len])
+            .repeat(0, data_points.len());
+        let embedded_features = EmbeddingConfig::new(vocab_size, model_size)
+            .init(device)
+            .forward(features);
+        let embedded_positions = EmbeddingConfig::new(max_seq_len, model_size)
+            .init(device)
+            .forward(index_positions);
+
+        let embeddings = embedded_features + embedded_positions;
+
         Batch {
-            features: mask.tensor,
-            labels: Tensor::from_floats(labels.as_slice(), device),
-            padding_masks: mask.mask,
-            max_seq_len,
+            embeddings,
+            labels,
+            mask,
         }
     }
 }
@@ -76,22 +101,36 @@ mod tests {
     #[test]
     fn test_create_batch() {
         let data = vec![
-            DataPoint::new("hello", "cross", "DO3", 0.75),
-            DataPoint::new("hello", "cross", "DO3", 0.75),
-            DataPoint::new("hello", "cross", "DO3", 0.75),
-            DataPoint::new("hello", "cross", "DO3", 0.75),
+            DataPoint {
+                feature: vec![1, 2, 3, 4],
+                label: 0.0,
+                seq_len: 4,
+            },
+            DataPoint {
+                feature: vec![5, 6, 7, 8],
+                label: 0.0,
+                seq_len: 4,
+            },
+            DataPoint {
+                feature: vec![9, 10, 11, 12],
+                label: 0.0,
+                seq_len: 4,
+            },
         ];
 
         let max_seq_len = 120;
-        let batch = Batcher::create_batch(&data, max_seq_len, &config::get_device());
+        let vocab_size = 100;
+        let model_size = 512;
+
+        let batch = Batcher::create_batch(
+            &data,
+            max_seq_len,
+            vocab_size,
+            model_size,
+            &config::get_device(),
+        );
         assert_eq!(&batch.labels.shape().dims, &[4 as usize]);
-        assert_eq!(
-            &batch.features.shape().dims,
-            &[4 as usize, max_seq_len as usize]
-        );
-        assert_eq!(
-            &batch.padding_masks.shape().dims,
-            &[4 as usize, max_seq_len as usize]
-        );
+        dbg!(batch);
+        assert!(false);
     }
 }
