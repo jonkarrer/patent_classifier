@@ -79,6 +79,7 @@ impl Batcher {
         let embedded_features = EmbeddingConfig::new(vocab_size, model_size)
             .init(device)
             .forward(features);
+
         let embedded_positions = EmbeddingConfig::new(max_seq_len, model_size)
             .init(device)
             .forward(index_positions);
@@ -103,12 +104,12 @@ mod tests {
         let data = vec![
             DataPoint {
                 feature: vec![1, 2, 3, 4],
-                label: 0.0,
+                label: 0.75,
                 seq_len: 4,
             },
             DataPoint {
                 feature: vec![5, 6, 7, 8],
-                label: 0.0,
+                label: 1.0,
                 seq_len: 4,
             },
             DataPoint {
@@ -129,8 +130,7 @@ mod tests {
             model_size,
             &config::get_device(),
         );
-        // assert_eq!(&batch.labels.shape().dims, &[4 as usize]);
-        dbg!(batch.embeddings.shape());
-        assert!(false);
+
+        assert!(batch.embeddings.shape().dims[0] == 3);
     }
 }
