@@ -129,8 +129,8 @@ mod tests {
             model_size,
             &config::get_device(),
         );
-        assert_eq!(&batch.labels.shape().dims, &[4 as usize]);
-        dbg!(batch);
+        // assert_eq!(&batch.labels.shape().dims, &[4 as usize]);
+        dbg!(batch.embeddings.shape());
         assert!(false);
     }
 }

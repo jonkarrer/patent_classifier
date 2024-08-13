@@ -99,42 +99,48 @@ fn tokenize(text: String) -> Encoding {
 
 ### Classifying
 
-We need to classify the data entry now. This is simply combining our encoded text with the classification.
+## Batching
 
-```rust
-fn classify(record: &PatentRecord) -> DataPoint {
-    let text = preprocess(record);
-    let tokenized = tokenize(text);
-    DataPoint {
-        encoded_text: tokenized,
-        classification: record.score.to_string(),
-    }
-}
-```
+We need to batch the data. This allows us to process the data in smaller chunks, and makes efficient use of the GPU.
 
-### Creating Dataset
+Our dataset is classified and tokenized, but this is still not enough for a neural network to process. We need to create tensors for the data. But what exactly IS our data? You could say that we have:
 
-Now we can bring it all together, and store the DataPoint in an InMemDataset.
+- Variable length arrays of numbers that represent the tokens (features)
+- Arrays of float numbers that represent the similarity score (label)
 
-```rust
-use burn::data::dataset::InMemDataset;
+Problem #1: The neural network does not like variable length sequences. So we need to pad the sequences with 0.
+Problem #2: The neural network does not like primitive arrays, it prefers tensors.
+Problem #3: The neural network does not know the MEANING of the data.
 
-pub fn create_dataset(path: &str) -> InMemDataset<DataPoint> {
-    let data = collect(path);
-    let set = data.into_iter().map(|rec| classify(&rec)).collect();
+### Padding masks
 
-    InMemDataset::new(set)
-}
-```
+Padding masks are used to eliminate problem #1. First we need to pad the short sequences up to the max sequence length. Then a padding mask is a binary array that tells the neural network if a value in the array is a padding value or not.
 
-### Split Dataset
+Padding example:
 
-Now that we have those neat functions set up, we can easily split the dataset. We need to split it into a training, validation set, and test set. For now we will only worry about the first two.
+> [[1, 2, 3], [4, 5, 6, 7, 8]] -> [[1, 2, 3, 0, 0], [4, 5, 6, 7, 8]]
 
-```rust
-    let training_set = data::create_dataset("dataset/train.csv");
-    let validation_set = data::create_dataset("dataset/validate.csv");
-```
+Padding mask example:
+
+> [[1, 1, 1, 0, 0], [1, 1, 1, 1, 1]]
+
+Our labels are fine, as they are not sequences.
+
+### Creating tensors
+
+Now that we have the padding masks, we can create the tensors.
+
+### Embedding
+
+Our tensors are ready to be fed into the neural network, but there is still one more issue. The NN does not know the meaning of the data. And how could it? It only sees the numbers as they are.
+
+The answer is embeddings. Embeddings are numbers that represent the meaning of the data. Our tokenizer made chunks (tokens), and then converted them into numbers (tokens ids), which built up a vocabulary. An embedding will take these discrete token ids and represent them with dense vectors. This is known as the **embedding layer**.
+
+Position is also a crucial factor. Words need context, because context changes the meaning of the word. Words can have various definitions, so context will help exact the meaning of the word. So we need a **position embedding**. This helps the model understand the position of the token in the sentence.
+
+### Creating a batch of data
+
+We can bring all these things together into a batch.
 
 ## Training
 

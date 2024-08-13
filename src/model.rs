@@ -17,7 +17,7 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn new(vocab_size: usize, max_seq_len: usize, device: &Device<MyBackend>) -> Self {
+    pub fn new(device: &Device<MyBackend>) -> Self {
         let model_size = 512;
         let feed_forward_dim = 2048;
         let attention_heads = 8;
@@ -55,6 +55,6 @@ mod tests {
         let vocab_size = 100;
         let max_seq_len = 120;
         let device = config::get_device();
-        let model = Model::new(vocab_size, max_seq_len, &device);
+        let model = Model::new(&device);
     }
 }
