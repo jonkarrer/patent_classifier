@@ -24,7 +24,7 @@ struct PatentRecord {
 #[derive(Clone, new)]
 pub struct DataPoint {
     pub feature: Vec<usize>,
-    pub label: f32,
+    pub label: i32,
     pub seq_len: usize,
 }
 
@@ -44,7 +44,7 @@ impl DataSet {
             let feature = Self::tokenize_text(tokenizer, &r.anchor, &r.target, &r.context);
             let seq_len = feature.len();
 
-            let dp = DataPoint::new(feature, r.score, seq_len);
+            let dp = DataPoint::new(feature, Self::format_label(r.score), seq_len);
 
             let sl = dp.seq_len;
             if sl > max_seq_len {
@@ -61,6 +61,10 @@ impl DataSet {
             max_seq_len,
             vocab_size,
         }
+    }
+
+    fn format_label(score: f32) -> i32 {
+        (score * 10.0) as i32
     }
 
     fn tokenize_text(
@@ -86,6 +90,18 @@ impl DataSet {
     }
 }
 
+pub fn class_name(label: i32) -> String {
+    match label {
+        0 => "Unrelated",
+        2 => "Somewhat Related",
+        5 => "Different Meaning Synonym",
+        7 => "Close Synonym",
+        10 => "Very Close Match",
+        _ => panic!("Invalid label"),
+    }
+    .to_string()
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -106,5 +122,12 @@ mod tests {
 
         dbg!(&encoded_text);
         assert!(encoded_text.len() == 18);
+    }
+
+    #[test]
+    fn test_format_label() {
+        let score = DataSet::format_label(0.75);
+        dbg!(&score);
+        assert!(score == 5);
     }
 }

@@ -142,8 +142,8 @@ Position is also a crucial factor. Words need context, because context changes t
 
 We can bring all these things together into a batch.
 
-## Training
+## Model
 
 The current status quo for Natural Language Processing is to use Transformers. This is a neural network architecture designed to understand the relationship between sequential data points.
 
-Our transformer will come from burn's very own Transformer crate.
+Our model will use a transformer to process the embeddings with a forward pass first. We will then pass the output of the transformer to a linear layer to get the predictions based on our classes. Lastly our loss function will calculate the loss between the predictions and the labels.
