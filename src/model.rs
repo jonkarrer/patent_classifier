@@ -1,14 +1,15 @@
 use burn::{
+    module::Module,
     nn::{
-        loss::{CrossEntropyLoss, CrossEntropyLossConfig},
         transformer::{TransformerEncoder, TransformerEncoderConfig, TransformerEncoderInput},
-        Embedding, EmbeddingConfig, Linear, LinearConfig,
+        Linear, LinearConfig,
     },
-    tensor::{Bool, Device, Int, Tensor},
+    tensor::{Bool, Device, Tensor},
 };
 
-use crate::{batcher::Batch, config::MyBackend};
+use crate::config::MyBackend;
 
+#[derive(Module, Debug, Clone)]
 pub struct Model {
     model_size: usize,
     feed_forward_dim: usize,
@@ -16,7 +17,6 @@ pub struct Model {
     num_layers: usize,
     transformer: TransformerEncoder<MyBackend>,
     linear_layer: Linear<MyBackend>,
-    loss_function: CrossEntropyLoss<MyBackend>,
 }
 
 impl Model {
@@ -34,7 +34,6 @@ impl Model {
         );
 
         let linear_layer = LinearConfig::new(model_size, num_classes).init(device);
-        let loss_function = CrossEntropyLossConfig::new().init(device);
 
         Self {
             model_size,
@@ -43,7 +42,6 @@ impl Model {
             num_layers,
             transformer: config.init(device),
             linear_layer,
-            loss_function,
         }
     }
 
@@ -54,14 +52,6 @@ impl Model {
     ) -> Tensor<MyBackend, 3> {
         let input = TransformerEncoderInput::new(embeddings).mask_pad(mask);
         self.linear_layer.forward(self.transformer.forward(input))
-    }
-
-    pub fn loss(
-        &self,
-        classification_input: Tensor<MyBackend, 2>,
-        labels: Tensor<MyBackend, 1, Int>,
-    ) -> Tensor<MyBackend, 1> {
-        self.loss_function.forward(classification_input, labels)
     }
 }
 
