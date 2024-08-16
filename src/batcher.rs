@@ -1,29 +1,27 @@
-use crate::{
-    config::MyBackend,
-    data::{DataPoint, DataSet},
-};
+use crate::data::DataPoint;
 use burn::{
     nn::{
         attention::{generate_padding_mask, GeneratePaddingMask},
         EmbeddingConfig,
     },
+    prelude::Backend,
     tensor::{Bool, Device, Float, Int, Tensor},
 };
 
 #[derive(Debug)]
-pub struct Batch {
-    pub embeddings: Tensor<MyBackend, 3, Float>,
-    pub labels: Tensor<MyBackend, 1, Int>,
-    pub mask: Tensor<MyBackend, 2, Bool>,
+pub struct Batch<B: Backend> {
+    pub embeddings: Tensor<B, 3, Float>,
+    pub labels: Tensor<B, 1, Int>,
+    pub mask: Tensor<B, 2, Bool>,
 }
 
-pub fn create_batch(
+pub fn create_batch<B: Backend>(
     data_points: &[DataPoint],
     max_seq_len: usize,
     vocab_size: usize,
     model_size: usize,
-    device: &Device<MyBackend>,
-) -> Batch {
+    device: &Device<B>,
+) -> Batch<B> {
     let mut features = Vec::new();
     let mut labels = Vec::new();
 
@@ -37,7 +35,7 @@ pub fn create_batch(
         labels.push(dp.label);
     }
 
-    let mask: GeneratePaddingMask<MyBackend> =
+    let mask: GeneratePaddingMask<B> =
         generate_padding_mask(0, features, Some(max_seq_len), device);
 
     let features = mask.tensor.to_device(device);
@@ -67,7 +65,7 @@ pub fn create_batch(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config;
+    use crate::config::{self, MyBackend};
 
     #[test]
     fn test_create_batch() {
@@ -93,7 +91,7 @@ mod tests {
         let vocab_size = 100;
         let model_size = 512;
 
-        let batch = create_batch(
+        let batch: Batch<MyBackend> = create_batch(
             &data,
             max_seq_len,
             vocab_size,

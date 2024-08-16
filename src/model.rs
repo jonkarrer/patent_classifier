@@ -4,23 +4,22 @@ use burn::{
         transformer::{TransformerEncoder, TransformerEncoderConfig, TransformerEncoderInput},
         Linear, LinearConfig,
     },
+    prelude::Backend,
     tensor::{Bool, Device, Tensor},
 };
 
-use crate::config::MyBackend;
-
-#[derive(Module, Debug, Clone)]
-pub struct Model {
+#[derive(Module, Debug)]
+pub struct Model<B: Backend> {
     model_size: usize,
     feed_forward_dim: usize,
     attention_heads: usize,
     num_layers: usize,
-    transformer: TransformerEncoder<MyBackend>,
-    linear_layer: Linear<MyBackend>,
+    transformer: TransformerEncoder<B>,
+    linear_layer: Linear<B>,
 }
 
-impl Model {
-    pub fn new(model_size: usize, device: &Device<MyBackend>) -> Self {
+impl<B: Backend> Model<B> {
+    pub fn new(model_size: usize, device: &Device<B>) -> Self {
         let feed_forward_dim = 2048;
         let attention_heads = 8;
         let num_layers = 4;
@@ -45,11 +44,7 @@ impl Model {
         }
     }
 
-    pub fn forward(
-        &self,
-        embeddings: Tensor<MyBackend, 3>,
-        mask: Tensor<MyBackend, 2, Bool>,
-    ) -> Tensor<MyBackend, 3> {
+    pub fn forward(&self, embeddings: Tensor<B, 3>, mask: Tensor<B, 2, Bool>) -> Tensor<B, 3> {
         let input = TransformerEncoderInput::new(embeddings).mask_pad(mask);
         self.linear_layer.forward(self.transformer.forward(input))
     }
